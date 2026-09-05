@@ -187,15 +187,23 @@ export function PlayView({ code }: { code: string }) {
     );
   }
 
+  const statusText = me.eliminated ? me.detail || "Eliminated" : statusLine(room, me);
   return (
     <main className="controller-surface flex h-dvh w-full flex-col overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-2 text-sm">
         <span className="size-4 rounded-full" style={{ background: color.css }} />
         <span className="font-bold">{me.name}</span>
-        <span className="ml-auto truncate font-mono text-muted">{me.eliminated ? me.detail || "Eliminated" : statusLine(room, me)}</span>
+        <span className="ml-auto truncate font-mono text-muted">{statusText}</span>
       </div>
       {banner && <div className="bg-red-600 py-1 text-center text-sm font-bold">{banner}</div>}
-      <div className="min-h-0 flex-1">
+      {/* Portrait: the top of the phone is out of thumb reach, so it shows who you are and the controls sit at the bottom. */}
+      <div className="hidden flex-1 flex-col items-center justify-center gap-3 px-6 text-center portrait:flex">
+        <span className="size-20 rounded-full border-4 border-white/20" style={{ background: color.css }} />
+        <p className="text-2xl font-bold">{me.name}</p>
+        <p className="text-muted">{statusText}</p>
+        <p className="max-w-xs text-sm text-muted">{game.controls}</p>
+      </div>
+      <div className="min-h-0 flex-1 portrait:h-[min(58vh,520px)] portrait:flex-none">
         {me.eliminated && game.hazardButton ? (
           <HazardPanel label={game.hazardButton} onChange={onInput} />
         ) : (

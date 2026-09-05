@@ -164,45 +164,56 @@ export function Gamepad({
   const cls = (active: boolean, color: ButtonColor) =>
     `${base} ${active ? `${COLORS[color].active} translate-y-1 border-b-4` : COLORS[color].idle} ${disabled ? "opacity-40" : ""}`;
   const steerCls = (active: boolean) =>
-    `${base} text-5xl ${active ? "bg-slate-500 border-slate-800 translate-y-1 border-b-4" : "bg-slate-700 border-slate-900"} ${disabled ? "opacity-40" : ""}`;
+    `${base} text-[clamp(1.8rem,7vmin,3.5rem)] ${active ? "bg-slate-500 border-slate-800 translate-y-1 border-b-4" : "bg-slate-700 border-slate-900"} ${disabled ? "opacity-40" : ""}`;
   const arrowCls = (active: boolean) =>
-    `absolute text-4xl font-black transition-colors ${active ? "text-white" : "text-slate-400"}`;
+    `absolute text-[clamp(1.4rem,5vmin,2.6rem)] font-black leading-none transition-colors ${active ? "text-white" : "text-slate-400"}`;
 
   return (
     <div
-      className="controller-surface grid h-full w-full grid-cols-2 gap-3 p-3"
+      className="controller-surface flex h-full w-full items-center justify-center p-3"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
       onPointerCancel={onPointerEnd}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {layout.pad === "2-way" ? (
-        <div className="grid grid-cols-2 gap-3">
-          <div data-btn="l" className={steerCls(pressed.l)} aria-label="Steer left">
-            ◀
+      {/* The cluster fills a phone held sideways, caps on tablets and desktops, and hugs the bottom in portrait. */}
+      <div className="grid h-full max-h-[600px] w-full max-w-[1100px] grid-cols-2 gap-3 portrait:max-h-none">
+        {layout.pad === "2-way" ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div data-btn="l" className={steerCls(pressed.l)} aria-label="Steer left">
+              ◀
+            </div>
+            <div data-btn="r" className={steerCls(pressed.r)} aria-label="Steer right">
+              ▶
+            </div>
           </div>
-          <div data-btn="r" className={steerCls(pressed.r)} aria-label="Steer right">
-            ▶
+        ) : (
+          <div
+            data-zone="pad"
+            className={`flex items-center justify-center rounded-3xl bg-slate-800/60 ${disabled ? "opacity-40" : ""}`}
+            style={{ containerType: "size" }}
+            aria-label="Direction pad"
+          >
+            <div
+              className="relative aspect-square rounded-full border-b-8 border-slate-900 bg-slate-700"
+              style={{ width: "min(92cqmin, 360px)" }}
+            >
+              <span className={`${arrowCls(pressed.u)} left-1/2 top-[6%] -translate-x-1/2`}>▲</span>
+              <span className={`${arrowCls(pressed.d)} bottom-[6%] left-1/2 -translate-x-1/2`}>▼</span>
+              <span className={`${arrowCls(pressed.l)} left-[6%] top-1/2 -translate-y-1/2`}>◀</span>
+              <span className={`${arrowCls(pressed.r)} right-[6%] top-1/2 -translate-y-1/2`}>▶</span>
+              <span className="absolute left-1/2 top-1/2 size-[22%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-600" />
+            </div>
           </div>
-        </div>
-      ) : (
-        <div data-zone="pad" className={`flex items-center justify-center rounded-3xl bg-slate-800/60 ${disabled ? "opacity-40" : ""}`} aria-label="Direction pad">
-          <div className="relative aspect-square w-[min(78%,300px)] rounded-full border-b-8 border-slate-900 bg-slate-700">
-            <span className={`${arrowCls(pressed.u)} left-1/2 top-3 -translate-x-1/2`}>▲</span>
-            <span className={`${arrowCls(pressed.d)} bottom-3 left-1/2 -translate-x-1/2`}>▼</span>
-            <span className={`${arrowCls(pressed.l)} left-3 top-1/2 -translate-y-1/2`}>◀</span>
-            <span className={`${arrowCls(pressed.r)} right-3 top-1/2 -translate-y-1/2`}>▶</span>
-            <span className="absolute left-1/2 top-1/2 size-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-600" />
+        )}
+        <div className="grid grid-rows-[3fr_2fr] gap-3">
+          <div data-btn="a" className={`${cls(pressed.a, layout.a.color)} text-[clamp(1.6rem,6vmin,3.2rem)]`} aria-label={layout.a.label}>
+            {layout.a.label}
           </div>
-        </div>
-      )}
-      <div className="grid grid-rows-[3fr_2fr] gap-3">
-        <div data-btn="a" className={`${cls(pressed.a, layout.a.color)} text-5xl`} aria-label={layout.a.label}>
-          {layout.a.label}
-        </div>
-        <div data-btn="b" className={`${cls(pressed.b, layout.b.color)} text-3xl`} aria-label={layout.b.label}>
-          {layout.b.label}
+          <div data-btn="b" className={`${cls(pressed.b, layout.b.color)} text-[clamp(1.2rem,4.5vmin,2.2rem)]`} aria-label={layout.b.label}>
+            {layout.b.label}
+          </div>
         </div>
       </div>
     </div>

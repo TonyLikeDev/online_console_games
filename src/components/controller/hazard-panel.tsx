@@ -48,7 +48,7 @@ export function HazardPanel({ label, onChange }: { label: string; onChange: (sta
         onPointerUp={release}
         onPointerCancel={release}
         onContextMenu={(e) => e.preventDefault()}
-        className={`flex aspect-square w-[min(60vw,50vh)] items-center justify-center rounded-full border-b-8 text-3xl font-black transition-transform duration-75 ${
+        className={`flex aspect-square w-[min(60vw,50vh,420px)] items-center justify-center rounded-full border-b-8 text-3xl font-black transition-transform duration-75 ${
           ready ? "border-amber-800 bg-amber-400 text-background" : "border-slate-900 bg-slate-700 text-slate-400"
         }`}
       >
