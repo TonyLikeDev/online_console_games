@@ -1,7 +1,12 @@
 # Console Games
 
 Party games on a shared big screen, with phones as controllers. Built with Next.js on Vercel.
-The first game is a top-down arcade racer for 2 to 8 players.
+Two games so far, both for 1 to 8 players:
+
+- **Racing**: a top-down arcade racer (Phaser). Three laps, checkpoints, results podium.
+- **Tumble Run**: a 3D obstacle-course show (Three.js + Rapier). Two race rounds with
+  eliminations, then a last-one-standing final on vanishing tiles. Eliminated players get a
+  hazard button on their phone that drops a ball on the survivors.
 
 ## How it works
 
@@ -23,7 +28,12 @@ Two ways to test without phones:
 
 - `NEXT_PUBLIC_TRANSPORT=local` in `.env.local` uses a same-browser transport. Open
   `http://localhost:3000/screen/new` in one tab and the join link in other tabs.
-- Add `?solo=1` to a screen URL to drive one car from the keyboard (arrows or WASD).
+- Add `?solo=1` to a screen URL to drive one player from the keyboard: arrows or WASD to
+  move, Space to jump or accelerate, Shift to dive or brake.
+- `?game=tumble` or `?game=racing` preselects a game, `&laps=1` shortens a race.
+- In development the screen exposes `window.__roomHost`, and the 3D game exposes
+  `window.__tumbleGame` whose `update(dt)` can be called from the console to step the show
+  by hand, which is how the automated checks drive it.
 
 ## Ably setup (real phones)
 
@@ -42,6 +52,9 @@ src/lib/protocol.ts     zod schemas for every message on the wire
 src/lib/transport       RoomTransport interface, Ably + local implementations
 src/lib/host            screen-side room state machine and input store
 src/lib/player          phone-side client
+src/lib/games.ts        game registry: names, controller layouts, hazard buttons
+src/lib/game-bridge.ts  contract between a running game and the room host
 src/games/racing        Phaser scene, track geometry, physics config
-src/components          screen (lobby, HUD, results) and controller UI
+src/games/tumble        Three.js + Rapier show: runner controller, obstacles, courses, rounds
+src/components          screen (lobby, HUDs, results) and controller UI (gamepad, hazard panel)
 ```

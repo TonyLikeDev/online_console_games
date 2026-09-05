@@ -12,7 +12,9 @@ import {
   WORLD_W,
 } from "./config";
 import { buildTrack, fractionAt, nearestPoint, startingGrid, type Track } from "./track";
-import type { RaceBridge, RaceResult, RacerDef, StandingEntry } from "./types";
+import type { RaceBridge, RacerDef, StandingEntry } from "./types";
+import type { GameResult } from "@/lib/game-bridge";
+import { formatTime } from "@/lib/format";
 
 interface Car {
   def: RacerDef;
@@ -85,7 +87,7 @@ export class RaceScene extends Phaser.Scene {
     this.track = buildTrack();
     this.drawTrack();
     this.makeCarTextures();
-    this.spawnCars(this.bridge.racers);
+    this.spawnCars(this.bridge.players);
 
     this.countdownText = this.add
       .text(WORLD_W / 2, WORLD_H / 2, "", {
@@ -282,7 +284,7 @@ export class RaceScene extends Phaser.Scene {
       this.lastStandingsAt = time;
       this.countdownText.setText("GO!").setScale(1).setAlpha(1);
       this.tweens.add({ targets: this.countdownText, alpha: 0, scale: 1.6, duration: 700, ease: "Cubic.easeOut" });
-      this.bridge.onRaceStarted();
+      this.bridge.onStarted();
       return;
     }
     if (n !== this.lastCountdownShown) {
@@ -296,6 +298,8 @@ export class RaceScene extends Phaser.Scene {
 
   private stepCar(car: Car, input: InputState, dt: number) {
     const steer = (input.r ? 1 : 0) - (input.l ? 1 : 0);
+    const gas = input.a || input.u;
+    const brake = input.b || input.d;
 
     let fx = Math.cos(car.heading);
     let fy = Math.sin(car.heading);
@@ -316,8 +320,8 @@ export class RaceScene extends Phaser.Scene {
     let ly = car.vy - vf * fy;
 
     const maxForward = car.onTrack ? P.maxSpeed : P.grassMaxSpeed;
-    if (input.g && vf < maxForward) vf = Math.min(vf + P.accel * dt, maxForward);
-    if (input.b) {
+    if (gas && vf < maxForward) vf = Math.min(vf + P.accel * dt, maxForward);
+    if (brake) {
       if (vf > 20) vf -= P.brakeDecel * dt;
       else vf = Math.max(vf - P.reverseAccel * dt, -P.reverseMax);
     }
@@ -399,7 +403,7 @@ export class RaceScene extends Phaser.Scene {
       car.nextCp = 1;
       car.lap += 1;
       if (car.lap > this.bridge.laps) this.finishCar(car, time);
-      else this.bridge.onLap(car.def.id, car.lap);
+      else this.bridge.onPlayer(car.def.id, { lap: car.lap });
     } else {
       car.nextCp = (car.nextCp + 1) % CHECKPOINTS;
     }
@@ -411,7 +415,7 @@ export class RaceScene extends Phaser.Scene {
     car.finishTimeMs = Math.round(time - this.raceStartedAt);
     car.label.setText(`${car.def.name} 🏁`);
     if (this.firstFinishAt === null) this.firstFinishAt = time;
-    this.bridge.onPlayerFinished(car.def.id, car.finishTimeMs);
+    this.bridge.onPlayer(car.def.id, { finished: true, finishTimeMs: car.finishTimeMs, detail: formatTime(car.finishTimeMs) });
   }
 
   /** Race progress used for ranking: laps, checkpoints passed, then distance into the current segment. */
@@ -445,7 +449,7 @@ export class RaceScene extends Phaser.Scene {
       finished: c.finished,
       finishTimeMs: c.finishTimeMs,
     }));
-    this.bridge.onTick({ elapsedMs: Math.round(time - this.raceStartedAt), standings });
+    this.bridge.onHud({ elapsedMs: Math.round(time - this.raceStartedAt), standings });
     const key = order.map((c) => c.def.id).join("|");
     if (key !== this.lastOrderKey) {
       this.lastOrderKey = key;
@@ -459,13 +463,14 @@ export class RaceScene extends Phaser.Scene {
     const timeUp = time - this.raceStartedAt > RACE_MAX_MS;
     if (!allDone && !graceOver && !timeUp) return;
     this.state = "ended";
-    const results: RaceResult[] = this.ordered().map((c, i) => ({
+    const results: GameResult[] = this.ordered().map((c, i) => ({
       id: c.def.id,
       position: i + 1,
       finishTimeMs: c.finishTimeMs,
+      detail: c.finishTimeMs !== null ? formatTime(c.finishTimeMs) : "DNF",
     }));
     this.reportStandings(time);
-    this.bridge.onRaceEnded(results);
+    this.bridge.onEnded(results);
   }
 
   // ---------- rendering ----------

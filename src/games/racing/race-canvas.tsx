@@ -29,15 +29,16 @@ export default function RaceCanvas({ bridge }: { bridge: RaceBridge }) {
     if (!parent) return;
     const initial = bridgeRef.current;
     const proxy: RaceBridge = {
-      racers: initial.racers,
+      players: initial.players,
       laps: initial.laps,
       inputs: initial.inputs,
-      onRaceStarted: () => bridgeRef.current.onRaceStarted(),
-      onLap: (id, lap) => bridgeRef.current.onLap(id, lap),
+      onStarted: () => bridgeRef.current.onStarted(),
+      onPlayer: (id, patch) => bridgeRef.current.onPlayer(id, patch),
+      onPlayers: (updates) => bridgeRef.current.onPlayers(updates),
       onStandings: (order) => bridgeRef.current.onStandings(order),
-      onPlayerFinished: (id, t) => bridgeRef.current.onPlayerFinished(id, t),
-      onRaceEnded: (results) => bridgeRef.current.onRaceEnded(results),
-      onTick: (info) => bridgeRef.current.onTick(info),
+      onStage: (stage) => bridgeRef.current.onStage(stage),
+      onEnded: (results) => bridgeRef.current.onEnded(results),
+      onHud: (hud) => bridgeRef.current.onHud(hud),
     };
     const game = new Phaser.Game({
       type: Phaser.AUTO,

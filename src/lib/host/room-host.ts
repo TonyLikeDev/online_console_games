@@ -1,5 +1,6 @@
 import {
   CommandSchema,
+  DEFAULT_GAME,
   DEFAULT_LAPS,
   Events,
   InputMessageSchema,
@@ -7,12 +8,15 @@ import {
   PROTOCOL_VERSION,
   PresenceDataSchema,
   sanitizeName,
+  type GameId,
   type Phase,
   type PlayerPublic,
   type RoomState,
+  type Stage,
 } from "@/lib/protocol";
 import { PLAYER_COLORS } from "@/lib/colors";
 import { screenClientId } from "@/lib/client-id";
+import type { GameResult, PlayerPatch } from "@/lib/game-bridge";
 import { createTransport, transportKind, type ConnectionStatus, type PresenceEvent, type RoomTransport, type TransportKind } from "@/lib/transport";
 import { InputStore } from "./input-store";
 
@@ -23,14 +27,8 @@ export interface HostSnapshot {
   error: string | null;
   transport: TransportKind;
   room: RoomState;
-  /** bumps every time a new race starts so the canvas remounts */
+  /** bumps every time a new game starts so the canvas remounts */
   raceSeed: number;
-}
-
-export interface RaceResult {
-  id: string;
-  position: number;
-  finishTimeMs: number | null;
 }
 
 /** Local keyboard player id used by the screen's solo test mode. */
@@ -38,9 +36,14 @@ export const LOCAL_PLAYER_ID = "local-keyboard";
 
 const ROOM_PUBLISH_THROTTLE_MS = 2000;
 
+function freshPlayerFields(position: number): Pick<PlayerPublic, "lap" | "position" | "finished" | "eliminated" | "detail" | "finishTimeMs"> {
+  return { lap: 0, position, finished: false, eliminated: false, detail: "", finishTimeMs: null };
+}
+
 /**
  * The big screen owns the room: it assigns seats and colours, runs the phase
- * machine, receives inputs, and broadcasts snapshots to the phones.
+ * machine, receives inputs, and broadcasts snapshots to the phones. Games
+ * report progress through the update methods at the bottom.
  */
 export class RoomHost {
   readonly inputs = new InputStore();
@@ -53,13 +56,13 @@ export class RoomHost {
   /** Bumped by start() and destroy() so a stale start() cannot resurrect a torn-down host. */
   private session = 0;
 
-  constructor(public readonly code: string, laps: number = DEFAULT_LAPS) {
+  constructor(public readonly code: string, laps: number = DEFAULT_LAPS, game: GameId = DEFAULT_GAME) {
     this.snapshot = {
       status: "starting",
       error: null,
       transport: transportKind(),
       raceSeed: 0,
-      room: { v: PROTOCOL_VERSION, code, phase: "lobby", hostId: null, laps, players: [] },
+      room: { v: PROTOCOL_VERSION, code, phase: "lobby", game, hostId: null, laps, stage: null, players: [] },
     };
   }
 
@@ -148,17 +151,14 @@ export class RoomHost {
       players[idx] = { ...players[idx], connected: true, name };
     } else {
       if (players.length >= MAX_PLAYERS) return;
-      const midRace = this.room.phase === "countdown" || this.room.phase === "racing";
+      const midGame = this.room.phase !== "lobby";
       players.push({
         id,
         name,
         colorIndex: this.nextColorIndex(),
         connected: true,
-        spectating: midRace,
-        lap: 0,
-        position: players.length + 1,
-        finished: false,
-        finishTimeMs: null,
+        spectating: midGame,
+        ...freshPlayerFields(players.length + 1),
       });
     }
     const hostId = this.room.hostId && players.some((p) => p.id === this.room.hostId && p.connected) ? this.room.hostId : id;
@@ -210,8 +210,8 @@ export class RoomHost {
     const parsed = InputMessageSchema.safeParse(data);
     if (!parsed.success) return;
     if (!this.room.players.some((p) => p.id === clientId)) return;
-    const { l, r, g, b, s } = parsed.data;
-    this.inputs.set(clientId, { l, r, g, b }, s);
+    const { l, r, u, d, a, b, s } = parsed.data;
+    this.inputs.set(clientId, { l, r, u, d, a, b }, s);
   }
 
   private onCommand(clientId: string, data: unknown) {
@@ -220,13 +220,16 @@ export class RoomHost {
     if (clientId !== this.room.hostId) return;
     switch (parsed.data.type) {
       case "start":
-        this.startRace();
+        this.startGame();
         break;
       case "again":
-        this.raceAgain();
+        this.playAgain();
         break;
       case "lobby":
         this.backToLobby();
+        break;
+      case "game":
+        this.setGame(parsed.data.game);
         break;
     }
   }
@@ -236,47 +239,73 @@ export class RoomHost {
     return this.room.phase;
   }
 
-  /** Players who take part in the current or next race. */
-  racers(): PlayerPublic[] {
+  /** Players who take part in the current or next game. */
+  participants(): PlayerPublic[] {
     return this.room.players.filter((p) => !p.spectating);
   }
 
-  startRace(): void {
-    if (this.room.phase !== "lobby" && this.room.phase !== "results") return;
-    const players = this.room.players
-      .filter((p) => p.connected)
-      .map((p, i) => ({ ...p, spectating: false, lap: 1, position: i + 1, finished: false, finishTimeMs: null }));
-    if (players.length === 0) return;
-    const hostId = players.some((p) => p.id === this.room.hostId) ? this.room.hostId : players[0].id;
-    this.commit({ raceSeed: this.snapshot.raceSeed + 1, room: { ...this.room, players, hostId, phase: "countdown" } });
+  setGame(game: GameId): void {
+    if (this.room.phase !== "lobby" || this.room.game === game) return;
+    this.commitRoom({ game });
     this.publishRoom();
   }
 
-  raceAgain(): void {
+  startGame(): void {
+    if (this.room.phase !== "lobby" && this.room.phase !== "results") return;
+    const players = this.room.players
+      .filter((p) => p.connected)
+      .map((p, i) => ({ ...p, spectating: false, ...freshPlayerFields(i + 1) }));
+    if (players.length === 0) return;
+    const hostId = players.some((p) => p.id === this.room.hostId) ? this.room.hostId : players[0].id;
+    this.commit({
+      raceSeed: this.snapshot.raceSeed + 1,
+      room: { ...this.room, players, hostId, phase: "countdown", stage: null },
+    });
+    this.publishRoom();
+  }
+
+  playAgain(): void {
     if (this.room.phase !== "results") return;
-    this.startRace();
+    this.startGame();
   }
 
   backToLobby(): void {
     if (this.room.phase !== "results") return;
     const players = this.room.players
       .filter((p) => p.connected)
-      .map((p, i) => ({ ...p, spectating: false, lap: 0, position: i + 1, finished: false, finishTimeMs: null }));
+      .map((p, i) => ({ ...p, spectating: false, ...freshPlayerFields(i + 1) }));
     const hostId = players.some((p) => p.id === this.room.hostId) ? this.room.hostId : (players[0]?.id ?? null);
-    this.commitRoom({ players, hostId, phase: "lobby" });
+    this.commitRoom({ players, hostId, phase: "lobby", stage: null });
     this.publishRoom();
   }
 
-  // ---- callbacks from the race scene ----
-  onRaceStarted(): void {
+  // ---- callbacks from the running game ----
+  onGameStarted(): void {
     if (this.room.phase !== "countdown") return;
-    this.commitRoom({ phase: "racing" });
+    this.commitRoom({ phase: "playing" });
     this.publishRoom();
   }
 
-  onLap(id: string, lap: number): void {
-    const players = this.room.players.map((p) => (p.id === id ? { ...p, lap } : p));
+  updatePlayer(id: string, patch: PlayerPatch): void {
+    if (!this.room.players.some((p) => p.id === id)) return;
+    const players = this.room.players.map((p) => (p.id === id ? { ...p, ...patch } : p));
     this.commitRoom({ players });
+    this.publishRoom();
+  }
+
+  updatePlayers(updates: Array<{ id: string; patch: PlayerPatch }>): void {
+    if (updates.length === 0) return;
+    const byId = new Map(updates.map((u) => [u.id, u.patch]));
+    const players = this.room.players.map((p) => {
+      const patch = byId.get(p.id);
+      return patch ? { ...p, ...patch } : p;
+    });
+    this.commitRoom({ players });
+    this.publishRoom();
+  }
+
+  setStage(stage: Stage): void {
+    this.commitRoom({ stage });
     this.publishRoom();
   }
 
@@ -293,17 +322,18 @@ export class RoomHost {
     this.publishRoom(false);
   }
 
-  onPlayerFinished(id: string, finishTimeMs: number): void {
-    const players = this.room.players.map((p) => (p.id === id ? { ...p, finished: true, finishTimeMs } : p));
-    this.commitRoom({ players });
-    this.publishRoom();
-  }
-
-  onRaceEnded(results: RaceResult[]): void {
+  onGameEnded(results: GameResult[]): void {
     const byId = new Map(results.map((r) => [r.id, r]));
     const players = this.room.players.map((p) => {
       const r = byId.get(p.id);
-      return r ? { ...p, position: r.position, finished: r.finishTimeMs !== null, finishTimeMs: r.finishTimeMs } : p;
+      if (!r) return p;
+      return {
+        ...p,
+        position: r.position,
+        detail: r.detail,
+        finished: true,
+        finishTimeMs: r.finishTimeMs === undefined ? p.finishTimeMs : r.finishTimeMs,
+      };
     });
     this.commitRoom({ players, phase: "results" });
     this.publishRoom();

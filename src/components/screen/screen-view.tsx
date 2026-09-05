@@ -5,23 +5,32 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRoomHost } from "@/lib/host/use-room-host";
 import { LOCAL_PLAYER_ID, type RoomHost } from "@/lib/host/room-host";
-import { NEUTRAL_INPUT, type InputState } from "@/lib/protocol";
-import type { RaceBridge, StandingEntry } from "@/games/racing/types";
+import { NEUTRAL_INPUT, type GameId, type InputState } from "@/lib/protocol";
+import type { GameBridge } from "@/lib/game-bridge";
+import type { RaceHudData } from "@/games/racing/types";
+import type { TumbleHudData } from "@/games/tumble/types";
 import { Lobby } from "./lobby";
 import { RaceHud } from "./race-hud";
+import { TumbleHud } from "./tumble-hud";
 import { Results } from "./results";
 
 const RaceCanvas = dynamic(() => import("@/games/racing/race-canvas"), { ssr: false });
+const TumbleCanvas = dynamic(() => import("@/games/tumble/tumble-canvas"), { ssr: false });
 
 const KEYMAP: Record<string, keyof InputState> = {
   ArrowLeft: "l",
   ArrowRight: "r",
-  ArrowUp: "g",
-  ArrowDown: "b",
+  ArrowUp: "u",
+  ArrowDown: "d",
   a: "l",
   d: "r",
-  w: "g",
-  s: "b",
+  w: "u",
+  s: "d",
+  " ": "a",
+  j: "a",
+  Enter: "a",
+  Shift: "b",
+  k: "b",
 };
 
 declare global {
@@ -31,9 +40,10 @@ declare global {
   }
 }
 
-export function ScreenView({ code, solo, laps }: { code: string; solo: boolean; laps?: number }) {
-  const { host, snapshot } = useRoomHost(code, laps);
+export function ScreenView({ code, solo, laps, game }: { code: string; solo: boolean; laps?: number; game?: GameId }) {
+  const { host, snapshot } = useRoomHost(code, laps, game);
   const { room } = snapshot;
+  const [hud, setHud] = useState<unknown>(null);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
@@ -42,9 +52,8 @@ export function ScreenView({ code, solo, laps }: { code: string; solo: boolean; 
       if (window.__roomHost === host) delete window.__roomHost;
     };
   }, [host]);
-  const [tick, setTick] = useState<{ elapsedMs: number; standings: StandingEntry[] } | null>(null);
 
-  // Solo test mode: the screen itself drives one car from the keyboard.
+  // Solo test mode: the screen itself drives one player from the keyboard.
   useEffect(() => {
     if (!solo || snapshot.status !== "connected") return;
     host.addLocalPlayer();
@@ -69,24 +78,25 @@ export function ScreenView({ code, solo, laps }: { code: string; solo: boolean; 
     };
   }, [solo, host, snapshot.status]);
 
-  const inRace = room.phase === "countdown" || room.phase === "racing" || room.phase === "results";
+  const inGame = room.phase === "countdown" || room.phase === "playing" || room.phase === "results";
 
-  const bridge = useMemo<RaceBridge | null>(() => {
-    if (!inRace) return null;
+  const bridge = useMemo<GameBridge | null>(() => {
+    if (!inGame) return null;
     return {
-      racers: host.racers().map((p) => ({ id: p.id, name: p.name, colorIndex: p.colorIndex })),
+      players: host.participants().map((p) => ({ id: p.id, name: p.name, colorIndex: p.colorIndex })),
       laps: room.laps,
       inputs: host.inputs,
-      onRaceStarted: () => host.onRaceStarted(),
-      onLap: (id, lap) => host.onLap(id, lap),
+      onStarted: () => host.onGameStarted(),
+      onPlayer: (id, patch) => host.updatePlayer(id, patch),
+      onPlayers: (updates) => host.updatePlayers(updates),
       onStandings: (order) => host.onStandings(order),
-      onPlayerFinished: (id, t) => host.onPlayerFinished(id, t),
-      onRaceEnded: (results) => host.onRaceEnded(results),
-      onTick: (info) => setTick(info),
+      onStage: (stage) => host.setStage(stage),
+      onEnded: (results) => host.onGameEnded(results),
+      onHud: (data) => setHud(data),
     };
-    // A new race (raceSeed) is the only thing that should rebuild the bridge.
+    // A new game (raceSeed) is the only thing that should rebuild the bridge.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host, inRace, snapshot.raceSeed]);
+  }, [host, inGame, snapshot.raceSeed]);
 
   if (snapshot.status === "error") {
     return (
@@ -104,16 +114,25 @@ export function ScreenView({ code, solo, laps }: { code: string; solo: boolean; 
     return <main className="flex flex-1 items-center justify-center text-muted">Connecting to {snapshot.transport}…</main>;
   }
 
-  if (!inRace || !bridge) {
-    return <Lobby snapshot={snapshot} onStart={() => host.startRace()} />;
+  if (!inGame || !bridge) {
+    return <Lobby snapshot={snapshot} onStart={() => host.startGame()} onSelectGame={(g) => host.setGame(g)} />;
   }
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-[#2f7a35]">
-      <RaceCanvas key={snapshot.raceSeed} bridge={bridge} />
-      <RaceHud room={room} tick={tick} />
+    <main className={`relative h-dvh w-full overflow-hidden ${room.game === "racing" ? "bg-[#2f7a35]" : "bg-[#8ec5ff]"}`}>
+      {room.game === "racing" ? (
+        <>
+          <RaceCanvas key={snapshot.raceSeed} bridge={bridge as GameBridge<RaceHudData>} />
+          <RaceHud room={room} hud={hud as RaceHudData | null} />
+        </>
+      ) : (
+        <>
+          <TumbleCanvas key={snapshot.raceSeed} bridge={bridge as GameBridge<TumbleHudData>} />
+          <TumbleHud room={room} hud={hud as TumbleHudData | null} />
+        </>
+      )}
       {room.phase === "results" && (
-        <Results room={room} onAgain={() => host.raceAgain()} onLobby={() => host.backToLobby()} />
+        <Results room={room} onAgain={() => host.playAgain()} onLobby={() => host.backToLobby()} />
       )}
       {snapshot.status !== "connected" && (
         <div className="absolute inset-x-0 top-0 bg-red-600/90 py-1 text-center text-sm font-bold">
