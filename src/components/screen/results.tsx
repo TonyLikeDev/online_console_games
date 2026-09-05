@@ -11,6 +11,7 @@ export function Results({ room, onAgain, onLobby }: { room: RoomState; onAgain: 
       <div className="w-full max-w-lg rounded-3xl border border-panel-border bg-panel p-8">
         <p className="text-sm uppercase tracking-[0.3em] text-muted">{GAMES[room.game].name}</p>
         <h2 className="font-display text-4xl text-accent">Results</h2>
+        {room.stage && <p className="mt-1 text-lg text-muted">{room.stage.name}</p>}
         <ol className="mt-6 flex flex-col gap-2">
           {ranked.map((p) => (
             <li key={p.id} className="flex items-center gap-3 rounded-xl bg-background px-4 py-3">

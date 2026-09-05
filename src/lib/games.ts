@@ -55,6 +55,18 @@ export const GAMES: Record<GameId, GameMeta> = {
     },
     hazardButton: "ROLL A BALL",
   },
+  kitchen: {
+    id: "kitchen",
+    name: "Kitchen Rush",
+    tagline: "Co-op cooking chaos. Chop, cook, plate, and serve before the orders expire.",
+    controls: "Move with the pad. GRAB picks up, drops, and plates. Hold CHOP at a board, or tap it to dash.",
+    controller: {
+      pad: "8-way",
+      a: { label: "GRAB", color: "green" },
+      b: { label: "CHOP", color: "yellow" },
+    },
+    hazardButton: null,
+  },
 };
 
 export const GAME_LIST: GameMeta[] = Object.values(GAMES);

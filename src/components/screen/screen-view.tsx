@@ -9,13 +9,22 @@ import { NEUTRAL_INPUT, type GameId, type InputState } from "@/lib/protocol";
 import type { GameBridge } from "@/lib/game-bridge";
 import type { RaceHudData } from "@/games/racing/types";
 import type { TumbleHudData } from "@/games/tumble/types";
+import type { KitchenHudData } from "@/games/kitchen/types";
 import { Lobby } from "./lobby";
 import { RaceHud } from "./race-hud";
 import { TumbleHud } from "./tumble-hud";
+import { KitchenHud } from "./kitchen-hud";
 import { Results } from "./results";
 
 const RaceCanvas = dynamic(() => import("@/games/racing/race-canvas"), { ssr: false });
 const TumbleCanvas = dynamic(() => import("@/games/tumble/tumble-canvas"), { ssr: false });
+const KitchenCanvas = dynamic(() => import("@/games/kitchen/kitchen-canvas"), { ssr: false });
+
+const GAME_BACKGROUND: Record<GameId, string> = {
+  racing: "bg-[#2f7a35]",
+  tumble: "bg-[#8ec5ff]",
+  kitchen: "bg-[#232733]",
+};
 
 const KEYMAP: Record<string, keyof InputState> = {
   ArrowLeft: "l",
@@ -119,16 +128,23 @@ export function ScreenView({ code, solo, laps, game }: { code: string; solo: boo
   }
 
   return (
-    <main className={`relative h-dvh w-full overflow-hidden ${room.game === "racing" ? "bg-[#2f7a35]" : "bg-[#8ec5ff]"}`}>
-      {room.game === "racing" ? (
+    <main className={`relative h-dvh w-full overflow-hidden ${GAME_BACKGROUND[room.game]}`}>
+      {room.game === "racing" && (
         <>
           <RaceCanvas key={snapshot.raceSeed} bridge={bridge as GameBridge<RaceHudData>} />
           <RaceHud room={room} hud={hud as RaceHudData | null} />
         </>
-      ) : (
+      )}
+      {room.game === "tumble" && (
         <>
           <TumbleCanvas key={snapshot.raceSeed} bridge={bridge as GameBridge<TumbleHudData>} />
           <TumbleHud room={room} hud={hud as TumbleHudData | null} />
+        </>
+      )}
+      {room.game === "kitchen" && (
+        <>
+          <KitchenCanvas key={snapshot.raceSeed} bridge={bridge as GameBridge<KitchenHudData>} />
+          <KitchenHud room={room} hud={hud as KitchenHudData | null} />
         </>
       )}
       {room.phase === "results" && (

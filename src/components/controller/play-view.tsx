@@ -18,6 +18,7 @@ function statusLine(room: RoomState, me: PlayerPublic): string {
     if (me.finished) return `Finished ${ordinal(me.position)}`;
     return `P${me.position} · Lap ${Math.max(1, me.lap)}/${room.laps}`;
   }
+  if (room.game === "kitchen") return room.stage?.name ?? "Cook!";
   const stage = room.stage ? `Round ${room.stage.index}/${room.stage.count} · ${room.stage.name}` : "";
   if (me.finished) return `Qualified! ${stage}`;
   return stage || "Run!";

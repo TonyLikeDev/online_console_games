@@ -9,7 +9,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const MAX_PLAYERS = 8;
 export const DEFAULT_LAPS = 3;
 
-export const GAME_IDS = ["racing", "tumble"] as const;
+export const GAME_IDS = ["racing", "tumble", "kitchen"] as const;
 export const GameIdSchema = z.enum(GAME_IDS);
 export type GameId = z.infer<typeof GameIdSchema>;
 export const DEFAULT_GAME: GameId = "racing";
